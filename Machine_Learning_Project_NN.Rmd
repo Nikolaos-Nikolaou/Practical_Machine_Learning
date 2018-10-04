@@ -1,0 +1,149 @@
+---
+title: "Machine_Learning_Project_NN"
+author: "Nikolaos Nikolaou"
+date: "1 October 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# **Synopsis**
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify **how much** of a particular activity they do, but they rarely quantify **how well** they do it. In this project, our goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. 
+
+Our goal is to predict the *manner in which they did the exercise*(variable classe in the training dataset)! Variable "**classe**" is a factor of 5 levels:
+**A** (exactly according to the specification), **B** (throwing the elbows to the front), **C** (lifting the dumbbell only halfway), **D** (lowering the dumbbell only halfway), **E** (throwing the hips to the front).
+
+We will *built a model* and explain how we did it. We will explain how we used *cross validation* and what we think the expected *out of sample error* is. In addition, why we made the choices we did. Finally, we will also use our *prediction model* to predict 20 different test cases.
+
+To ensure *reproducibility*, we will set the seed to 2018.
+
+Finally, the final model will be selected between the models which will be created by 2 different procedures: *classification trees* & *random forests*
+
+# **Analysis**
+
+### How we used Cross Validation?
+
+- We will use the training set & split it into training/test subsets
+- We will reserve a training subset, the 70% of the original
+- We will built a model using the training subset
+- We will use the reserve test set(the remaining 30% of the original) to evaluate our model. 
+
+This will help us in gauging the effectiveness of our model’s performance.
+
+Finally, we will use the original testing set to evaluate our choice.
+
+### Some steps to begin with
+
+```{r, results="hide"}
+# English system language
+Sys.setenv("LANGUAGE"="En")
+Sys.setlocale("LC_ALL", "English")
+```
+
+## Data Processing
+
+```{r, message=FALSE, warning = FALSE}
+set.seed(2018) # for reproducible analysis
+
+# Let's load & read the datasets
+pml_training <- read.csv(url("http://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"), na.strings=c("NA","#DIV/0!",""), header=TRUE)
+dim(pml_training)
+
+pml_testing <- read.csv(url("http://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"), na.strings=c("NA","#DIV/0!",""), header=TRUE)
+dim(pml_testing)
+
+# Let's have a look of our training dataset
+str(pml_training) # We observe some NA's and some #DIV/0! values. After such an observation we ran again the loadings above to include na.strings
+
+library(caret) # Needed library
+
+# Let's split the training dataset as we mentioned above
+inTrain <- createDataPartition(pml_training$classe, p = 0.7, list = FALSE)
+s_training <- pml_training[inTrain,] ; s_testing <- pml_training[-inTrain,]
+
+# Let's have a brief look
+dim(s_training) ; dim(s_testing) ; dim(s_training)[1]/dim(pml_training)[1]
+
+# Let's remove the first 7 columns as they give info that we don't need them for our prediction model
+s_training <- s_training[, -c(1:7)] ; s_testing <- s_testing[, -c(1:7)]
+
+# Let's clean our train & test datasets from all those variables which have at least 30% of NAs.
+z <- which(colSums(is.na(s_training)| s_training == "") > 0.3*dim(s_training)[1]) 
+s_training <- s_training[,-z]
+x <- colnames(s_training) ; y <- colnames(s_training[,-53])
+s_testing <- s_testing[x] ; pml_testing <- pml_testing[y]
+
+# Let's have a brief look again
+dim(s_training) ; dim(s_testing) ; dim(pml_testing)
+```
+
+### **Classification tree**
+
+```{r, message=FALSE, warning = FALSE}
+# Needed libraries
+library(rpart) 
+library(rpart.plot)
+library(rattle)
+
+r_part <- rpart(classe ~., data = s_training, method="class")
+
+# We exhibit the results of classifications in Appendix - plot 1
+
+# Let's predict
+p_r_part <- predict(r_part, newdata = s_testing, type="class")
+print(c_r_part <- confusionMatrix(p_r_part, s_testing$classe))
+```
+
+As we see, the accuracy of our prediction is 75.33% with expected out of sample error to be (1-0.7533)*100% = 24.67%! Let's compare these results with the results of another prediction model to pick the best!
+
+### **Random forests**
+
+```{r, message=FALSE, warning = FALSE}
+# Needed libraries
+library(randomForest) 
+library(repmis)
+
+r_forest <- randomForest(classe ~., data = s_training)
+
+# Let's predict
+p_r_forest <- predict(r_forest, s_testing)
+print(c_r_forest <- confusionMatrix(s_testing$classe, p_r_forest))
+
+# Graphical illustration of error rate in Appendix
+```
+
+WoW! The accuracy seems great! But maybe is a result of overfitting(?). Accuracy 99.49% and expected out of sample error (1-0.9949)*100% = 0.51%.
+
+# *Conclusion*
+
+As we can interpret random forests method gives so much better results than classification tree method. Its accuracy rate is almost 0.99, and so the expected out of sample error rate is approximately 0.01. In contrary, classification trees accuracy is approximately 0.76 and its expected out of sample error rate is almost 0.24.
+
+So, we will end our project with the use of random forests to predict the outcome variable classe in the testing set because of its better accuracy.
+
+```{r}
+print(predict(r_forest, pml_testing))
+```
+
+# **Appendix**
+
+```{r, message=FALSE, warning = FALSE}
+# Correlation Plot
+library(corrplot)
+cor <- cor(s_training[,-53])
+corrplot(cor, order = "FPC", type = "lower", method = "shade", tl.cex = 0.5)
+```
+
+Correlation between the features is not in a high degree so we do not have problems to solve in a way of preprocessing the data or so to avoid multicollinearity.
+
+```{r}
+# Classification tree method - plot 1
+prp(r_part, varlen = 10, box.palette = list("pink", "orange", "gray", "lightblue", "lightgreen"), main = "Final Classification Tree")
+
+# Random Forests method - plot 2 & 3
+# Let's plot the error for all 5 different classes over the amount of trees
+plot(r_forest, ylim = c(0, 0.17), main = "Random Forest Error Rate(OOB)") 
+```
+
